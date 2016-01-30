@@ -7,6 +7,7 @@ import std.algorithm.searching;
 import std.conv;
 import std.file;
 import std.format;
+import std.math;
 import std.stdio;
 import std.uni;
 
@@ -37,10 +38,60 @@ class InvalidMapException : Exception {
     }
 }
 
+// Thanks to Jagex for breaking the map format in AoS 1.0 and requiring us to parse the map twice!!!111
+private void computeMapSize(const ubyte[] data, ref uint xLength, ref uint yLength, ref uint zLength) {
+
+    uint columns = 0;
+    uint maxHeight = 0;
+    uint dataPointer = 0;
+
+    while (dataPointer < data.length) {
+
+        ubyte next;
+        ubyte s;
+        ubyte e;
+        ubyte air_start;
+
+        // Loop through the data until we reach the end of the pillar
+        while (true) {
+
+            // Read control entity
+            next = data[dataPointer++];  // Distance to next control block, 0 if no more
+            s = data[dataPointer++];  // Start of floor colour run
+            e = data[dataPointer++];  // ^
+            air_start = data[dataPointer++];  // Start of air run
+
+            if (e > maxHeight) maxHeight = e;
+
+            for (int i = s; i < e + 1; i++) {
+                dataPointer += 4;
+            }
+
+            if (next == 0) break;
+
+            for (int i = e - s + 1; i < next - 1; i++) {
+                dataPointer += 4;
+            }
+        }
+
+        columns++;
+    }
+    xLength = cast(uint)sqrt(cast(float)columns);
+    zLength = xLength;
+    yLength = maxHeight + 1;
+}
+
 // TODO: Figure out way to use ImageRGB8 instead of ImageRGBA8 if backgroundColour.a == 255 (waste of space in files)
 // Most of the function would be the same, (pixelSize already deals with the size different), it's just the alpha
 // channel writes that would need to be removed. Can we create two versions of this function from some sort of template?
 SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint zLength, Colour backgroundColour) {
+
+    if (yLength == 0 || xLength == 0 || zLength == 0) {
+        computeMapSize(data, xLength, yLength, zLength);
+        debug {
+            writeln("Calculated map size: %s, %s, %s".format(xLength, yLength, zLength));
+        }
+    }
 
     uint dataPointer = 0;
     immutable uint imgWidth = (xLength + zLength) * 2;
@@ -135,7 +186,7 @@ SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint 
 }
 
 SuperImage generatePreviewVXL(const ubyte[] data, Colour backgroundColour) {
-    return generatePreview(data, 512, 64, 512, backgroundColour);
+    return generatePreview(data, 0, 0, 0, backgroundColour);
 }
 
 SuperImage generatePreviewIcemap(const ubyte[] data, Colour backgroundColour) {
