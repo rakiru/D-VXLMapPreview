@@ -4,6 +4,7 @@ module vxlimagegen;
 // Oh, turns out it's an ancient bug that has yet to be fixed. That sure makes me want to invest in learning the language... <_<
 // https://issues.dlang.org/show_bug.cgi?id=314
 import std.algorithm.searching;
+import std.conv;
 import std.file;
 import std.format;
 import std.stdio;
@@ -16,7 +17,7 @@ private const string ICEMAP_HEADER = "IceMap\x1A\x01";
 private const string ICEMAP_TAG_MAP_DATA = "MapData";
 private const string ICEMAP_TERMINATOR = "       ";
 
-private struct Colour {
+private struct BlockColour {
     ubyte b;
     ubyte g;
     ubyte r;
@@ -36,24 +37,27 @@ class InvalidMapException : Exception {
     }
 }
 
-SuperImage generatePreview(ubyte[] data, uint xLength, uint yLength, uint zLength) {
+// TODO: Figure out way to use ImageRGB8 instead of ImageRGBA8 if backgroundColour.a == 255 (waste of space in files)
+// Most of the function would be the same, (pixelSize already deals with the size different), it's just the alpha
+// channel writes that would need to be removed. Can we create two versions of this function from some sort of template?
+SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint zLength, Colour backgroundColour) {
 
     uint dataPointer = 0;
-    uint imgWidth = (xLength + zLength) * 2;
-    uint imgHeight = (xLength + zLength) + (yLength * 2);
+    immutable uint imgWidth = (xLength + zLength) * 2;
+    immutable uint imgHeight = (xLength + zLength) + (yLength * 2);
 
-    SuperImage img = new ImageRGB8(imgWidth, imgHeight);
+    SuperImage img = new ImageRGBA8(imgWidth, imgHeight);
     // We have to operate on the raw data because the setPixel mathod is private,
     // and the index operator only works on floats. <_<
     auto imgData = img.data;
-    auto pixelSize = img.pixelSize;
+    immutable auto pixelSize = img.pixelSize;
 
-    Colour[] colours;
+    BlockColour[] colours;
     colours.length = yLength;
     uint colourOffset = 0;
 
-    Colour getColour() {
-        Colour colour = Colour(
+    BlockColour getColour() {
+        auto colour = BlockColour(
             data[dataPointer++],
             data[dataPointer++],
             data[dataPointer++]
@@ -62,17 +66,26 @@ SuperImage generatePreview(ubyte[] data, uint xLength, uint yLength, uint zLengt
         return colour;
     }
 
-    void drawBlock(uint x, uint y, uint z, Colour colour) {
-        uint rx = (z - x) * 2 + (imgWidth / 2);
-        uint ry = x + z + (y * 2);
+    void drawBlock(uint x, uint y, uint z, BlockColour colour) {
+        immutable uint rx = (z - x) * 2 + (imgWidth / 2);
+        immutable uint ry = x + z + (y * 2);
         for (int i = 0; i < 2; i++) {
-            uint ii = (((ry + i) * imgWidth) + rx) * pixelSize;
+            immutable uint ii = (((ry + i) * imgWidth) + rx) * pixelSize;
             for (int j = 0; j < 2 * pixelSize; j += pixelSize) {
-                imgData[ii + j] = colour.r;
-                imgData[ii + j + 1] = colour.g;
-                imgData[ii + j + 2] = colour.b;
+                immutable auto p = ii + j;
+                imgData[p] = colour.r;
+                imgData[p + 1] = colour.g;
+                imgData[p + 2] = colour.b;
+                imgData[p + 3] = 255;
             }
         }
+    }
+
+    for (int i = 0; i < imgData.length; i += pixelSize) {
+        imgData[i] = backgroundColour.r;
+        imgData[i + 1] = backgroundColour.g;
+        imgData[i + 2] = backgroundColour.b;
+        imgData[i + 3] = backgroundColour.a;
     }
 
     for (int x = 0; x < zLength; x++) {
@@ -82,7 +95,7 @@ SuperImage generatePreview(ubyte[] data, uint xLength, uint yLength, uint zLengt
             ubyte s;
             ubyte e;
             ubyte air_start;
-            Colour lastColour = {0, 0, 0};
+            BlockColour lastColour = {0, 0, 0};
 
             // Loop through the data until we reach the end of the pillar
             while (true) {
@@ -121,14 +134,14 @@ SuperImage generatePreview(ubyte[] data, uint xLength, uint yLength, uint zLengt
     return img;
 }
 
-SuperImage generatePreviewVXL(ubyte[] data) {
-    return generatePreview(data, 512, 64, 512);
+SuperImage generatePreviewVXL(const ubyte[] data, Colour backgroundColour) {
+    return generatePreview(data, 512, 64, 512, backgroundColour);
 }
 
-SuperImage generatePreviewIcemap(ubyte[] data) {
+SuperImage generatePreviewIcemap(const ubyte[] data, Colour backgroundColour) {
 
     uint dataPointer = ICEMAP_HEADER.length;
-    auto dataLength = data.length;
+    immutable auto dataLength = data.length;
 
     uint readVarInt() {
         ubyte first = data[dataPointer++];
@@ -154,17 +167,17 @@ SuperImage generatePreviewIcemap(ubyte[] data) {
         if (dataPointer + 8 > dataLength) {
             throw new InvalidMapException("Reached end of file before end of map (partial file?)");
         }
-        auto tag = data[dataPointer..dataPointer + 7];
+        const auto tag = data[dataPointer..dataPointer + 7];
         dataPointer += 7;
         uint chunkLength = readVarInt();
         if (tag == ICEMAP_TERMINATOR && chunkLength == 0) {
             break;
         } else if (tag == ICEMAP_TAG_MAP_DATA) {
-            uint xLength = read16();
-            uint yLength = read16();
-            uint zLength = read16();
+            immutable uint xLength = read16();
+            immutable uint yLength = read16();
+            immutable uint zLength = read16();
             auto mapData = data[dataPointer..dataPointer + chunkLength - 6];
-            return generatePreview(mapData, xLength, yLength, zLength);
+            return generatePreview(mapData, xLength, yLength, zLength, backgroundColour);
         } else {
             dataPointer += chunkLength;
         }
@@ -172,14 +185,70 @@ SuperImage generatePreviewIcemap(ubyte[] data) {
     throw new InvalidMapException("No MapData section");
 }
 
-void drawMap(string inputFilename, string outputFilename) {
+void drawMap(string inputFilename, string outputFilename, Colour backgroundColour=Colour(0, 0, 0, 255)) {
     ubyte[] data = cast(ubyte[])read(inputFilename);
     SuperImage img;
     if (inputFilename.toLower().endsWith(".vxl")) {
-        img = generatePreviewVXL(data);
+        img = generatePreviewVXL(data, backgroundColour);
     } else {
         // Assume Icemap since it has (map spec does optionally, we don't yet) VXL compatability
-        img = generatePreviewIcemap(data);
+        img = generatePreviewIcemap(data, backgroundColour);
     }
     img.savePNG(outputFilename);
+}
+
+// TODO: Organisation - split utils things into different file
+public struct Colour {
+    ubyte r;
+    ubyte g;
+    ubyte b;
+    ubyte a = 255;
+}
+
+class InvalidColourException : Exception {
+    public {
+        @safe pure nothrow this(string message, string file=__FILE__, size_t line=__LINE__, Throwable next=null) {
+            super(message, file, line, next);
+        }
+        @safe pure nothrow this(string message, Throwable next, string file=__FILE__, size_t line=__LINE__) {
+            super(message, file, line, next);
+        }
+    }
+}
+
+public Colour parseColourString(string colourString) {
+
+    colourString = colourString.toLower();
+    if (colourString.startsWith("0x")) {
+        colourString = colourString[2..colourString.length];
+    }
+
+    ubyte getValue(immutable uint position) {
+        ubyte total = 0;
+        foreach (c; colourString[position * 2..position * 2 + 2]) {
+            total <<= 4;
+            if (c >= '0' && c <= '9') {
+                total += c - '0';
+            } else if (c >= 'a' && c <= 'f') {
+                total += c - 'a' + 10;
+            } else {
+                throw new InvalidColourException("Colour must be a hex string in format RGB or RGBA");
+            }
+        }
+        return total;
+    }
+
+    immutable auto len = colourString.length;
+    Colour colour;
+    if (len != 6 && len != 8) {
+        throw new InvalidColourException("Colour must be a hex string in format RGB or RGBA");
+    }
+
+    colour.r = getValue(0);//getValue(0);
+    colour.g = getValue(1);
+    colour.b = getValue(2);
+    if (len == 8) {
+        colour.a = getValue(3);
+    }
+    return colour;
 }

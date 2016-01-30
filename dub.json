@@ -1,10 +1,14 @@
 {
     "name": "d-vxlmappreview",
     "description": "Generates isometric preview images of VXL and Icemap maps for Ace of Spades and Iceball.",
-    "copyright": "Copyright © 2016, Sean Gordon",
     "authors": ["Sean Gordon"],
+    "copyright": "Copyright © 2016, Sean Gordon",
     "license": "BSD 3-clause",
+    "homepage": "https://github.com/rakiru/D-VXLMapPreview",
     "dependencies": {
         "dlib": "~>0.7"
-    }
+    },
+    "buildRequirements": [
+        "requireBoundsCheck"
+    ]
 }
