@@ -63,20 +63,16 @@ private void computeMapSize(const ubyte[] data, ref uint xLength, ref uint yLeng
 
             if (e > maxHeight) maxHeight = e;
 
-            for (int i = s; i < e + 1; i++) {
-                dataPointer += 4;
-            }
+            dataPointer += (e - s + 1) * 4;
 
             if (next == 0) break;
 
-            for (int i = e - s + 1; i < next - 1; i++) {
-                dataPointer += 4;
-            }
+            dataPointer += (next - (e - s) - 2) * 4;
         }
 
         columns++;
     }
-    xLength = cast(uint)sqrt(cast(float)columns);
+    xLength = cast(uint)sqrt(float(columns));
     zLength = xLength;
     yLength = maxHeight + 1;
 }
@@ -101,7 +97,7 @@ SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint 
     // We have to operate on the raw data because the setPixel mathod is private,
     // and the index operator only works on floats. <_<
     auto imgData = img.data;
-    immutable auto pixelSize = img.pixelSize;
+    immutable pixelSize = img.pixelSize;
 
     BlockColour[] colours;
     colours.length = yLength;
@@ -123,7 +119,7 @@ SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint 
         for (int i = 0; i < 2; i++) {
             immutable uint ii = (((ry + i) * imgWidth) + rx) * pixelSize;
             for (int j = 0; j < 2 * pixelSize; j += pixelSize) {
-                immutable auto p = ii + j;
+                immutable p = ii + j;
                 imgData[p] = colour.r;
                 imgData[p + 1] = colour.g;
                 imgData[p + 2] = colour.b;
@@ -192,7 +188,7 @@ SuperImage generatePreviewVXL(const ubyte[] data, Colour backgroundColour) {
 SuperImage generatePreviewIcemap(const ubyte[] data, Colour backgroundColour) {
 
     uint dataPointer = ICEMAP_HEADER.length;
-    immutable auto dataLength = data.length;
+    immutable dataLength = data.length;
 
     uint readVarInt() {
         ubyte first = data[dataPointer++];
@@ -214,7 +210,7 @@ SuperImage generatePreviewIcemap(const ubyte[] data, Colour backgroundColour) {
     }
 
     while (true) {
-        // TODO: Just catch RangeError over whole function and throw this? There are many other places we could OOB.
+        // TODO: Do proper bounds checking other places too, and bypass builtin bounds checking in those places
         if (dataPointer + 8 > dataLength) {
             throw new InvalidMapException("Reached end of file before end of map (partial file?)");
         }
@@ -289,13 +285,13 @@ public Colour parseColourString(string colourString) {
         return total;
     }
 
-    immutable auto len = colourString.length;
+    immutable len = colourString.length;
     Colour colour;
     if (len != 6 && len != 8) {
         throw new InvalidColourException("Colour must be a hex string in format RGB or RGBA");
     }
 
-    colour.r = getValue(0);//getValue(0);
+    colour.r = getValue(0);
     colour.g = getValue(1);
     colour.b = getValue(2);
     if (len == 8) {
