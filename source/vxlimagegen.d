@@ -44,22 +44,23 @@ private void computeMapSize(const ubyte[] data, ref uint xLength, ref uint yLeng
     uint columns = 0;
     uint maxHeight = 0;
     uint dataPointer = 0;
+    immutable dataLength = data.length;
 
-    while (dataPointer < data.length) {
+    while (dataPointer + 3 < dataLength) {
 
         ubyte next;
         ubyte s;
         ubyte e;
-        ubyte air_start;
 
         // Loop through the data until we reach the end of the pillar
         while (true) {
 
             // Read control entity
-            next = data[dataPointer++];  // Distance to next control block, 0 if no more
-            s = data[dataPointer++];  // Start of floor colour run
-            e = data[dataPointer++];  // ^
-            air_start = data[dataPointer++];  // Start of air run
+            // Bypass builtin bounds checking for performance (while loop ensures we're safe already)
+            next = data.ptr[dataPointer++];  // Distance to next control block, 0 if no more
+            s = data.ptr[dataPointer++];  // Start of floor colour run
+            e = data.ptr[dataPointer++];  // ^
+            dataPointer++;  // Start of air run, not needed here
 
             if (e > maxHeight) maxHeight = e;
 
