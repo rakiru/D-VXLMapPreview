@@ -83,6 +83,7 @@ private void computeMapSize(const ubyte[] data, ref uint xLength, ref uint yLeng
 // channel writes that would need to be removed. Can we create two versions of this function from some sort of template?
 SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint zLength, Colour backgroundColour) {
 
+    // TODO: Continue on adding custom bounds checking so we can raise InvalidMapExceptions instead of RangeErrors and crashing
     if (yLength == 0 || xLength == 0 || zLength == 0) {
         computeMapSize(data, xLength, yLength, zLength);
         debug {
@@ -91,6 +92,7 @@ SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint 
     }
 
     uint dataPointer = 0;
+    immutable dataLength = data.length;
     immutable uint imgWidth = (xLength + zLength) * 2;
     immutable uint imgHeight = (xLength + zLength) + (yLength * 2);
 
@@ -105,10 +107,13 @@ SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint 
     uint colourOffset = 0;
 
     BlockColour getColour() {
+        if (dataPointer + 3 >= dataLength) {
+            throw new InvalidMapException("Reached end of file before end of map (partial file?)");
+        }
         auto colour = BlockColour(
-            data[dataPointer++],
-            data[dataPointer++],
-            data[dataPointer++]
+            data.ptr[dataPointer++],
+            data.ptr[dataPointer++],
+            data.ptr[dataPointer++]
         );
         dataPointer++;  // "Light"
         return colour;
@@ -148,11 +153,15 @@ SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint 
             // Loop through the data until we reach the end of the pillar
             while (true) {
 
+                if (dataPointer + 3 >= dataLength) {
+                    throw new InvalidMapException("Reached end of file before end of map (partial file?)");
+                }
+
                 // Read control entity
-                next = data[dataPointer++];  // Distance to next control block, 0 if no more
-                s = data[dataPointer++];  // Start of floor colour run
-                e = data[dataPointer++];  // ^
-                air_start = data[dataPointer++];  // Start of air run
+                next = data.ptr[dataPointer++];  // Distance to next control block, 0 if no more
+                s = data.ptr[dataPointer++];  // Start of floor colour run
+                e = data.ptr[dataPointer++];  // ^
+                air_start = data.ptr[dataPointer++];  // Start of air run
 
                 for (int i = 0; i < colourOffset; i++) {
                     drawBlock(x, air_start - colourOffset + i, z, colours[i]);
@@ -186,36 +195,50 @@ SuperImage generatePreviewVXL(const ubyte[] data, Colour backgroundColour) {
     return generatePreview(data, 0, 0, 0, backgroundColour);
 }
 
-SuperImage generatePreviewIcemap(const ubyte[] data, Colour backgroundColour) {
+SuperImage generatePreviewIcemap(const ubyte[] data, Colour backgroundColour, bool vxlFallback=true) {
 
     uint dataPointer = ICEMAP_HEADER.length;
     immutable dataLength = data.length;
 
     uint readVarInt() {
-        ubyte first = data[dataPointer++];
+        if (dataPointer >= dataLength) {
+            throw new InvalidMapException("Reached end of file before end of map (partial file?)");
+        }
+        ubyte first = data.ptr[dataPointer++];
         if (first < 0xFF) {
             return first;
         }
-        return data[dataPointer++] + (data[dataPointer++] << 8) + (data[dataPointer++] << 16) + (data[dataPointer++] << 24);
+        if (dataPointer + 3 >= dataLength) {
+            throw new InvalidMapException("Reached end of file before end of map (partial file?)");
+        }
+        return data.ptr[dataPointer++] + (data.ptr[dataPointer++] << 8) + (data.ptr[dataPointer++] << 16) + (data.ptr[dataPointer++] << 24);
     }
 
     uint read16() {
-        return data[dataPointer++] + (data[dataPointer++] << 8);
+        if (dataPointer + 1 >= dataLength) {
+            throw new InvalidMapException("Reached end of file before end of map (partial file?)");
+        }
+        return data.ptr[dataPointer++] + (data.ptr[dataPointer++] << 8);
     }
 
     // Check header
     if (data[0..ICEMAP_HEADER.length] != ICEMAP_HEADER) {
-        // TODO: Fall back to VXL-compatability mode? Optional argument?
-        // I don't currently have a file to test VXL fallback on, and I'm not sure if Iceball supports it atm anyway.
-        throw new InvalidMapException("Not an Icemap v1 (missing header)");
+        // Note: Untested as I don't have such a file on hand.
+        if (vxlFallback) {
+            debug {
+                writeln("Falling back to VXL mode");
+            }
+            return generatePreview(data, 512, 64, 512, backgroundColour);
+        } else {
+            throw new InvalidMapException("Not an Icemap v1 (missing header)");
+        }
     }
 
     while (true) {
-        // TODO: Do proper bounds checking other places too, and bypass builtin bounds checking in those places
-        if (dataPointer + 8 > dataLength) {
+        if (dataPointer + 7 >= dataLength) {
             throw new InvalidMapException("Reached end of file before end of map (partial file?)");
         }
-        const auto tag = data[dataPointer..dataPointer + 7];
+        const auto tag = data.ptr[dataPointer..dataPointer + 7];
         dataPointer += 7;
         uint chunkLength = readVarInt();
         if (tag == ICEMAP_TERMINATOR && chunkLength == 0) {
@@ -224,6 +247,9 @@ SuperImage generatePreviewIcemap(const ubyte[] data, Colour backgroundColour) {
             immutable uint xLength = read16();
             immutable uint yLength = read16();
             immutable uint zLength = read16();
+            if (dataPointer + chunkLength - 6 >= dataLength) {
+                throw new InvalidMapException("Reached end of file before end of map (partial file?)");
+            }
             auto mapData = data[dataPointer..dataPointer + chunkLength - 6];
             return generatePreview(mapData, xLength, yLength, zLength, backgroundColour);
         } else {
