@@ -53,7 +53,7 @@ private void computeMapSize(const ubyte[] data, ref uint xLength, ref uint yLeng
         ubyte e;
 
         // Loop through the data until we reach the end of the pillar
-        while (true) {
+        while (dataPointer + 3 < dataLength) {
 
             // Read control entity
             // Bypass builtin bounds checking for performance (while loop ensures we're safe already)
