@@ -83,7 +83,6 @@ private void computeMapSize(const ubyte[] data, ref uint xLength, ref uint yLeng
 // channel writes that would need to be removed. Can we create two versions of this function from some sort of template?
 SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint zLength, Colour backgroundColour) {
 
-    // TODO: Continue on adding custom bounds checking so we can raise InvalidMapExceptions instead of RangeErrors and crashing
     if (yLength == 0 || xLength == 0 || zLength == 0) {
         computeMapSize(data, xLength, yLength, zLength);
         debug {
@@ -100,7 +99,9 @@ SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint 
     // We have to operate on the raw data because the setPixel mathod is private,
     // and the index operator only works on floats. <_<
     auto imgData = img.data;
+    immutable imgDataLength = imgData.length;
     immutable pixelSize = img.pixelSize;
+    assert(pixelSize >= 4);
 
     BlockColour[] colours;
     colours.length = yLength;
@@ -124,21 +125,24 @@ SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint 
         immutable uint ry = x + z + (y * 2);
         for (int i = 0; i < 2; i++) {
             immutable uint ii = (((ry + i) * imgWidth) + rx) * pixelSize;
+            if (ii + pixelSize + 3 >= imgDataLength) {
+                throw new InvalidMapException("Attempted to draw out of bounds blocks");
+            }
             for (int j = 0; j < 2 * pixelSize; j += pixelSize) {
                 immutable p = ii + j;
-                imgData[p] = colour.r;
-                imgData[p + 1] = colour.g;
-                imgData[p + 2] = colour.b;
-                imgData[p + 3] = 255;
+                imgData.ptr[p] = colour.r;
+                imgData.ptr[p + 1] = colour.g;
+                imgData.ptr[p + 2] = colour.b;
+                imgData.ptr[p + 3] = 255;
             }
         }
     }
 
-    for (int i = 0; i < imgData.length; i += pixelSize) {
-        imgData[i] = backgroundColour.r;
-        imgData[i + 1] = backgroundColour.g;
-        imgData[i + 2] = backgroundColour.b;
-        imgData[i + 3] = backgroundColour.a;
+    for (int i = 0; i < imgDataLength; i += pixelSize) {
+        imgData.ptr[i] = backgroundColour.r;
+        imgData.ptr[i + 1] = backgroundColour.g;
+        imgData.ptr[i + 2] = backgroundColour.b;
+        imgData.ptr[i + 3] = backgroundColour.a;
     }
 
     for (int x = 0; x < zLength; x++) {
