@@ -7,8 +7,5 @@
     "homepage": "https://github.com/rakiru/D-VXLMapPreview",
     "dependencies": {
         "dlib": "~>0.7"
-    },
-    "buildRequirements": [
-        "requireBoundsCheck"
-    ]
+    }
 }

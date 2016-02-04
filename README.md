@@ -23,8 +23,6 @@ Building
 
     dub build
 
-Note: This project relies on D's builtin bounds checking for handling certain invalid/malicious files.
-
 TODO
 ----
 
