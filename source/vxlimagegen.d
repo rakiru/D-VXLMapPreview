@@ -181,6 +181,9 @@ SuperImage generatePreview(const ubyte[] data, uint xLength, uint yLength, uint 
                 if (next == 0) break;
 
                 for (int i = e - s + 1; i < next - 1; i++) {
+                    if (colourOffset >= colours.length) {
+                        throw new InvalidMapException("Invalid colour control entity");
+                    }
                     colours[colourOffset] = getColour();
                     colourOffset += 1;
                 }
