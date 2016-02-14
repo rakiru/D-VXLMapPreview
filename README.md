@@ -15,6 +15,7 @@ Usage
     d-vxlmappreview --input=mesa.vxl --output=mesa.png --background=0x333333
     d-vxlmappreview --input=mesa.vxl --output=mesa.png --background=0x000000FF
     d-vxlmappreview --input=mesa.vxl --output=mesa.png --transparent
+    d-vxlmappreview -i mesa.vxl -o mesa.png
 
 ![Preview image for mesa.vxl](docs/images/mesa.png)
 
