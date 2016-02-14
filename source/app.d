@@ -26,9 +26,9 @@ int main(string[] args)
         auto optResult = getopt(
             args,
             config.required,
-            "input|i", "VXL map file", &inputFilename,
+            "input|in|i", "VXL map file", &inputFilename,
             config.required,
-            "output|o", "PNG output file", &outputFilename,
+            "output|out|o", "PNG output file", &outputFilename,
             "background|b", "background colour", &backgroundColourHandler,
             "transparent|t", "transparent background", &transparentBackground,
         );
@@ -51,7 +51,12 @@ int main(string[] args)
         backgroundColour.a = 0;
     }
 
-    drawMap(inputFilename, outputFilename, backgroundColour);
+    try {
+        drawMap(inputFilename, outputFilename, backgroundColour);
+    } catch (InvalidMapException ex) {
+        writeln("Error while drawing map: ", ex.msg);
+        return 1;
+    }
 
     return 0;
 }
